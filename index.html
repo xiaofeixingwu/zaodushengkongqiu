@@ -1091,6 +1091,51 @@
       font-size: 14px;
     }
 
+    .review-card {
+      position: relative;
+      padding: 22px 22px 20px;
+    }
+
+    .review-card h3 {
+      margin: 0 0 8px;
+      font-family: var(--font-display);
+      font-size: 20px;
+      letter-spacing: 0.4px;
+    }
+
+    .review-card p {
+      margin: 0 0 16px;
+      color: var(--text-muted);
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    .review-card .action-btn {
+      width: 100%;
+      justify-content: center;
+    }
+
+    .modal-close {
+      position: absolute;
+      top: 10px;
+      right: 12px;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      border: none;
+      background: rgba(255, 255, 255, 0.85);
+      color: var(--text-muted);
+      font-size: 16px;
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+      box-shadow: 0 6px 12px rgba(255, 182, 120, 0.18);
+    }
+
+    .modal-close:hover {
+      color: var(--text-main);
+    }
+
     .progress {
       height: 8px;
       border-radius: 999px;
@@ -1439,6 +1484,15 @@
     </div>
   </div>
 
+  <div id="reviewModal" class="modal" aria-hidden="true">
+    <div class="modal-card review-card" role="dialog" aria-modal="true" aria-labelledby="reviewTitle" aria-describedby="reviewDesc">
+      <button id="reviewClose" class="modal-close" type="button" aria-label="关闭">×</button>
+      <h3 id="reviewTitle">🎁 好评有礼</h3>
+      <p id="reviewDesc">给个五星好评截图发客服<br />免费领取店内任意一款产品！</p>
+      <button id="reviewOk" class="action-btn primary" type="button">我知道了</button>
+    </div>
+  </div>
+
   <script>
     (() => {
       "use strict";
@@ -1543,7 +1597,10 @@
         modal: document.getElementById("calibrationModal"),
         modalTitle: document.getElementById("modalTitle"),
         modalDesc: document.getElementById("modalDesc"),
-        modalProgress: document.getElementById("modalProgress")
+        modalProgress: document.getElementById("modalProgress"),
+        reviewModal: document.getElementById("reviewModal"),
+        reviewClose: document.getElementById("reviewClose"),
+        reviewOk: document.getElementById("reviewOk")
       };
 
       const ctx = ui.stage.getContext("2d");
@@ -1564,6 +1621,10 @@
       const starColors = ["#ffe066", "#ffd6ff", "#bde0fe", "#caffbf", "#ffd6a5"];
       const ribbonColors = ["#ff6b6b", "#ffb703", "#4cc9f0", "#57cc99", "#f8961e", "#f15bb5"];
       const bubbleColors = ["#9be7ff", "#b8f2e6", "#ffd6a5"];
+      const REVIEW_POPUP_KEY = "reviewPopupShown";
+      const REVIEW_DELAY_MIN = 3 * 60 * 1000;
+      const REVIEW_DELAY_MAX = 5 * 60 * 1000;
+      let reviewTimer = null;
 
       function clamp(value, min, max) {
         return Math.min(Math.max(value, min), max);
@@ -2926,6 +2987,53 @@
         ui.modal.classList.remove("active");
       }
 
+      function hasSeenReviewPopup() {
+        try {
+          return window.localStorage.getItem(REVIEW_POPUP_KEY) === "1";
+        } catch (error) {
+          return false;
+        }
+      }
+
+      function markReviewPopupShown() {
+        try {
+          window.localStorage.setItem(REVIEW_POPUP_KEY, "1");
+        } catch (error) {
+          return;
+        }
+      }
+
+      function showReviewModal() {
+        if (!ui.reviewModal) {
+          return;
+        }
+        ui.reviewModal.classList.add("active");
+        ui.reviewModal.setAttribute("aria-hidden", "false");
+        markReviewPopupShown();
+      }
+
+      function hideReviewModal() {
+        if (!ui.reviewModal) {
+          return;
+        }
+        ui.reviewModal.classList.remove("active");
+        ui.reviewModal.setAttribute("aria-hidden", "true");
+      }
+
+      function scheduleReviewModal() {
+        if (!ui.reviewModal || hasSeenReviewPopup()) {
+          return;
+        }
+        const delay = REVIEW_DELAY_MIN + Math.random() * (REVIEW_DELAY_MAX - REVIEW_DELAY_MIN);
+        reviewTimer = window.setTimeout(() => {
+          if (ui.modal && ui.modal.classList.contains("active")) {
+            reviewTimer = window.setTimeout(showReviewModal, 30000);
+            return;
+          }
+          showReviewModal();
+        }, delay);
+      }
+
       function sampleDb(durationMs, label) {
         return new Promise((resolve) => {
           const samples = [];
@@ -3056,6 +3164,30 @@
           ui.demoValue.textContent = String(state.demoDb);
         });
 
+        if (ui.reviewModal) {
+          ui.reviewModal.addEventListener("click", (event) => {
+            if (event.target === ui.reviewModal) {
+              hideReviewModal();
+            }
+          });
+        }
+
+        if (ui.reviewClose) {
+          ui.reviewClose.addEventListener("click", hideReviewModal);
+        }
+
+        if (ui.reviewOk) {
+          ui.reviewOk.addEventListener("click", hideReviewModal);
+        }
+
+        document.addEventListener("keydown", (event) => {
+          if (event.key === "Escape" &&
+              ui.reviewModal &&
+              ui.reviewModal.classList.contains("active")) {
+            hideReviewModal();
+          }
+        });
+
         window.addEventListener("resize", () => {
           scheduleResize();
         });
@@ -3073,6 +3205,7 @@
         updateDemoPanel();
         bindEvents();
         updateFullscreenUI();
+        scheduleReviewModal();
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
           state.audioSupported = false;
           enableDemoMode("当前浏览器不支持麦克风接口，已进入演示模式。");
